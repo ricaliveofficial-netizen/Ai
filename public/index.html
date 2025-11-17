@@ -1,93 +1,91 @@
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Mini Replit (No Default Files)</title></head>
+<head><meta charset="utf-8"><title>Replit Clone</title></head>
 <body>
-  <h2>Mini Replit-like (Empty Project Mode)</h2>
-  <div>
-    <button id="newProj">New Project</button>
-    <input id="projName" placeholder="project name" value="proj">
-    <select id="projSel"></select>
-    <button id="load">Load</button>
-    <button id="run">Run</button>
-    <button id="tasks">Show Tasks</button>
-  </div>
+<h2>Mini Replit</h2>
 
-  <div style="margin-top:10px;">
-    <input id="filePath" placeholder="filename e.g. main.py or src/app.js" style="width:40%;">
-    <button id="newFile">New File</button>
-    <button id="saveFile">Save File</button>
-    <button id="openFile">Open File</button>
-  </div>
+<div>
+  <input id="projName" placeholder="project name" />
+  <button id="newProj">New</button>
 
-  <textarea id="editor" style="width:100%;height:300px;"></textarea>
-  <pre id="out"></pre>
+  <select id="projSel"></select>
+  <button id="load">Load</button>
+  <button id="run">Run</button>
+  <button id="tasks">Tasks</button>
+</div>
+
+<div style="margin-top:10px;">
+  <input id="filePath" placeholder="main.py" />
+  <button id="openFile">Open</button>
+  <button id="saveFile">Save</button>
+</div>
+
+<textarea id="editor" style="width:100%;height:300px;"></textarea>
+<pre id="out"></pre>
 
 <script>
-let currentProject = null;
+let current = null;
 
-async function refreshProjects(){
-  const r = await fetch('/api/projects');
-  const j = await r.json();
-  const sel = document.getElementById('projSel');
-  sel.innerHTML = '';
-  j.forEach(p=>{ const o = document.createElement('option'); o.value=p.id; o.textContent=p.name; sel.appendChild(o);});
-}
-document.getElementById('newProj').onclick = async ()=>{
-  const name = document.getElementById('projName').value || ('proj-'+Date.now());
-  const r = await fetch('/api/projects', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({name})});
-  await refreshProjects();
-  alert('project created');
-};
-
-document.getElementById('load').onclick = async ()=>{
-  const id = document.getElementById('projSel').value;
-  if(!id) return alert('select project');
-  const r = await fetch('/api/projects/'+id);
+async function refresh() {
+  const r = await fetch("/api/projects");
   const p = await r.json();
-  currentProject = p.id;
-  document.getElementById('out').textContent = 'Loaded project: '+p.name + ' (files: '+ (p.files.length)+')';
+  const sel = document.getElementById("projSel");
+  sel.innerHTML = "";
+  p.forEach(x => {
+    const o = document.createElement("option");
+    o.value = x.id;
+    o.textContent = x.name;
+    sel.appendChild(o);
+  });
+}
+
+document.getElementById("newProj").onclick = async () => {
+  const name = document.getElementById("projName").value || "proj";
+  await fetch("/api/projects", {
+    method: "POST",
+    headers: {"content-type": "application/json"},
+    body: JSON.stringify({ name })
+  });
+  refresh();
 };
 
-document.getElementById('newFile').onclick = async ()=>{
-  const fp = document.getElementById('filePath').value;
-  if(!currentProject) return alert('load a project first');
-  if(!fp) return alert('enter filename');
-  const r = await fetch('/api/projects/'+currentProject+'/files', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({path: fp, content: ''})});
-  if (r.ok) { alert('file created'); } else { alert('error'); }
+document.getElementById("load").onclick = () => {
+  current = document.getElementById("projSel").value;
+  document.getElementById("out").textContent = "Loaded: " + current;
 };
 
-document.getElementById('openFile').onclick = async ()=>{
-  const fp = document.getElementById('filePath').value;
-  if(!currentProject) return alert('load a project first');
-  if(!fp) return alert('enter filename');
-  const r = await fetch('/api/projects/'+currentProject+'/files/'+encodeURIComponent(fp));
-  if(!r.ok) return alert('file not found');
-  const j = await r.json();
-  document.getElementById('editor').value = j.content;
+document.getElementById("openFile").onclick = async () => {
+  if (!current) return alert("Load project first");
+  const path = document.getElementById("filePath").value;
+  const r = await fetch(`/api/projects/${current}/files/${path}`);
+  if (!r.ok) return alert("Not found");
+  const file = await r.json();
+  document.getElementById("editor").value = file.content;
 };
 
-document.getElementById('saveFile').onclick = async ()=>{
-  const fp = document.getElementById('filePath').value;
-  if(!currentProject) return alert('load a project first');
-  if(!fp) return alert('enter filename');
-  const content = document.getElementById('editor').value;
-  const r = await fetch('/api/projects/'+currentProject+'/files', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({path: fp, content})});
-  if (r.ok) alert('saved'); else alert('save failed');
+document.getElementById("saveFile").onclick = async () => {
+  if (!current) return alert("Load project first");
+  const path = document.getElementById("filePath").value;
+  const content = document.getElementById("editor").value;
+  await fetch(`/api/projects/${current}/files`, {
+    method: "POST",
+    headers: {"content-type": "application/json"},
+    body: JSON.stringify({ path, content })
+  });
+  alert("Saved");
 };
 
-document.getElementById('run').onclick = async ()=>{
-  if(!currentProject) return alert('load a project first');
-  const r = await fetch('/api/projects/'+currentProject+'/run',{method:'POST'});
-  document.getElementById('out').textContent = 'Run queued...';
+document.getElementById("run").onclick = async () => {
+  await fetch(`/api/projects/${current}/run`, { method: "POST" });
+  document.getElementById("out").textContent = "Running...";
 };
 
-document.getElementById('tasks').onclick = async ()=>{
-  const r = await fetch('/api/tasks');
-  const j = await r.json();
-  document.getElementById('out').textContent = JSON.stringify(j, null, 2);
+document.getElementById("tasks").onclick = async () => {
+  const r = await fetch("/api/tasks");
+  document.getElementById("out").textContent = JSON.stringify(await r.json(), null, 2);
 };
 
-refreshProjects();
+refresh();
 </script>
 </body>
 </html>
