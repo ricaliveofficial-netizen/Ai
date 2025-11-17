@@ -8,36 +8,42 @@ import path from "path";
 import fs from "fs/promises";
 import { fileURLToPath } from "url";
 
+// dirname fix
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Express config
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static("public"));
 
+// DB setup
 const adapter = new JSONFile("db.json");
 const db = new Low(adapter);
 
+// Fix: Prevent "missing default data" error
 async function initDB() {
   await db.read();
-  db.data = db.data || { projects: [], tasks: [] };
-  await db.write();
+  if (!db.data) {
+    db.data = { projects: [], tasks: [] };
+    await db.write();
+  }
 }
-initDB();
+await initDB();
 
-// Create empty project
+
+// Create project
 app.post("/api/projects", async (req, res) => {
   const { name } = req.body;
-
   await db.read();
-  const id = nanoid();
 
+  const id = nanoid();
   const project = {
     id,
     name,
     files: [],
-    createdAt: Date.now(),
+    createdAt: Date.now()
   };
 
   db.data.projects.push(project);
@@ -58,33 +64,31 @@ app.get("/api/projects", async (req, res) => {
 // Get project
 app.get("/api/projects/:id", async (req, res) => {
   await db.read();
-  const p = db.data.projects.find((x) => x.id === req.params.id);
-  if (!p) return res.status(404).json({ error: "not found" });
-  res.json(p);
+  const project = db.data.projects.find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: "not found" });
+  res.json(project);
 });
 
-// Create / Update a file
+// Save file
 app.post("/api/projects/:id/files", async (req, res) => {
   const projectId = req.params.id;
   const { path: filepath, content } = req.body;
 
-  if (!filepath) return res.status(400).json({ error: "missing path" });
-
   await db.read();
-  const p = db.data.projects.find((x) => x.id === projectId);
+  const project = db.data.projects.find(p => p.id === projectId);
 
-  if (!p) return res.status(404).json({ error: "project not found" });
+  if (!project) return res.status(404).json({ error: "project not found" });
 
-  const existing = p.files.find((f) => f.path === filepath);
+  const exists = project.files.find(f => f.path === filepath);
 
-  if (!existing) {
-    p.files.push({
+  if (!exists) {
+    project.files.push({
       path: filepath,
       createdAt: Date.now(),
-      updatedAt: Date.now(),
+      updatedAt: Date.now()
     });
   } else {
-    existing.updatedAt = Date.now();
+    exists.updatedAt = Date.now();
   }
 
   await db.write();
@@ -96,36 +100,34 @@ app.post("/api/projects/:id/files", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Get file content
-app.get("/api/projects/:id/files/:filePath(*)", async (req, res) => {
-  const filePath = req.params.filePath;
-  const file = path.join(__dirname, "projects", req.params.id, filePath);
+// Read file
+app.get("/api/projects/:id/files/:fp(*)", async (req, res) => {
+  const fp = req.params.fp;
+  const target = path.join(__dirname, "projects", req.params.id, fp);
 
   try {
-    const content = await fs.readFile(file, "utf8");
-    res.json({ path: filePath, content });
+    const content = await fs.readFile(target, "utf8");
+    res.json({ path: fp, content });
   } catch {
     res.status(404).json({ error: "file not found" });
   }
 });
 
-// Queue run
+// Queue run task
 app.post("/api/projects/:id/run", async (req, res) => {
-  const projectId = req.params.id;
-
   await db.read();
-  const t = {
+
+  const task = {
     id: nanoid(),
-    projectId,
-    type: "run",
+    projectId: req.params.id,
     status: "queued",
     createdAt: Date.now(),
-    attempts: 0,
+    attempts: 0
   };
 
-  db.data.tasks.push(t);
+  db.data.tasks.push(task);
   await db.write();
-  res.json(t);
+  res.json(task);
 });
 
 // List tasks
@@ -134,5 +136,6 @@ app.get("/api/tasks", async (req, res) => {
   res.json(db.data.tasks);
 });
 
+// Start server
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Server running on", PORT));
+app.listen(PORT, () => console.log("SERVER RUNNING ON PORT", PORT));
